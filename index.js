@@ -1,47 +1,49 @@
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const OpenAI = require('openai');
-const http = require('http');
 require('dotenv').config();
 
-// 1. Heartbeat for Railway
-http.createServer((req, res) => { res.write('OK'); res.end(); }).listen(process.env.PORT || 8080);
-
+// 1. Setup the Client with "Partials" and "Intents"
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent // Ensure this is ON in Dev Portal!
-    ]
+        GatewayIntentBits.MessageContent, // Required to read the text
+        GatewayIntentBits.DirectMessages
+    ],
+    partials: [Partials.Channel, Partials.Message] 
 });
 
+// 2. Setup OpenRouter
 const openai = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY,
+  apiKey: process.env.OPENROUTER_API_KEY, // Make sure this matches Railway
+  defaultHeaders: {
+    "HTTP-Referer": "https://github.com",
+    "X-Title": "Discord Bot",
+  }
 });
 
 client.once('ready', () => {
-    console.log(`✅ Bot logged in as ${client.user.tag}`);
+    console.log(`✅ Bot is online as ${client.user.tag}`);
 });
 
-// Catch errors so the bot doesn't die
-process.on('unhandledRejection', error => console.error('Uncaught Error:', error));
-
 client.on('messageCreate', async (message) => {
-    if (message.author.bot || !message.mentions.has(client.user)) return;
-    const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
+    // --- DEBUG: This will show in your Railway logs ---
+    console.log(`Message seen from ${message.author.tag}: ${message.content}`);
+
+    if (message.author.bot) return;
+
+    // Check if the bot was mentioned
+    if (!message.mentions.has(client.user)) return;
 
     try {
         await message.channel.sendTyping();
-        const completion = await openai.chat.completions.create({
-            model: "google/gemini-2.0-flash-001", 
-            messages: [{ role: "user", content: prompt }],
-        });
-        await message.reply(completion.choices[0].message.content);
-    } catch (err) {
-        console.error("OpenRouter Error:", err);
-    }
-});
 
-client.login(process.env.TOKEN).catch(err => {
-    console.error("❌ Failed to login to Discord. Check your TOKEN!");
-});
+        const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
+        
+        const response = await openai.chat.completions.create({
+            model: "google/gemini-2.0-flash-001", // Or "meta-llama/llama-3.1-8b-instruct:free"
+            messages: [{ role: "user", content: prompt || "Hello!" }],
+        });
+
+        const reply = response.choices[0].message.content;
