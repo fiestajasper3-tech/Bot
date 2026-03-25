@@ -1,5 +1,4 @@
 const { Client, GatewayIntentBits } = require('discord.js');
-const OpenAI = require('openai');
 require('dotenv').config();
 
 const client = new Client({
@@ -10,47 +9,64 @@ const client = new Client({
   ]
 });
 
-const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY 
-});
+// We are using OpenRouter's free "Auto" model or Qwen Coder
+const API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 client.once('ready', () => {
-  console.log(`✅ ChatGPT Bot is online as ${client.user.tag}`);
+  console.log(`🚀 Bot is live! Mention me for coding help.`);
 });
 
 client.on('messageCreate', async (message) => {
-  // Ignore bots
+  // Ignore other bots
   if (message.author.bot) return;
 
-  // Only reply if the bot is @mentioned
+  // Check if the bot was @mentioned
   if (message.mentions.has(client.user) && !message.mentions.everyone) {
     
+    // Clean the prompt (remove the bot's @tag)
     const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
-    if (!prompt) return message.reply("I'm here! Ask me any coding question.");
+    
+    if (!prompt) return message.reply("I'm here! Ask me a coding question, like: 'How do I center a div?'");
 
     try {
       await message.channel.sendTyping();
 
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini", // Fastest and most affordable coding model in 2026
-        messages: [
-          { role: "system", content: "You are a professional coding assistant. Provide clean code blocks and helpful explanations." },
-          { role: "user", content: prompt }
-        ],
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://railway.app", // Required by OpenRouter
+          "X-Title": "Discord Coding Bot"
+        },
+        body: JSON.stringify({
+          model: "openrouter/auto", // OpenRouter will pick the best free model
+          messages: [
+            { role: "system", content: "You are an elite coding assistant. Provide clean code and short explanations. Use Markdown for code blocks." },
+            { role: "user", content: prompt }
+          ]
+        })
       });
 
-      let responseText = completion.choices[0].message.content;
-
-      // Handle Discord's 2000 character limit
-      if (responseText.length > 2000) {
-        responseText = responseText.substring(0, 1900) + "... (Response truncated)";
+      const data = await response.json();
+      
+      // Safety check for API errors
+      if (!data.choices || data.error) {
+        throw new Error(data.error?.message || "API Error");
       }
 
-      await message.reply(responseText);
+      let aiText = data.choices[0].message.content;
+
+      // Discord character limit fix
+      if (aiText.length > 2000) {
+        aiText = aiText.substring(0, 1900) + "... (Response too long)";
+      }
+
+      await message.reply(aiText);
 
     } catch (error) {
-      console.error("OpenAI Error:", error);
-      message.reply("❌ Error: Make sure your OpenAI account has a paid balance ($5 minimum)!");
+      console.error(error);
+      message.reply("❌ My brain is lagging! Make sure your OpenRouter key is correct in Railway.");
     }
   }
 });
