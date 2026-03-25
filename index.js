@@ -1,45 +1,38 @@
 const { Client, GatewayIntentBits } = require('discord.js');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 require('dotenv').config();
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
 });
 
-const API_URL = "https://openrouter.ai/api/v1/chat/completions";
+// Setup Gemini
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); // Fast & Free for 2026
 
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   if (message.mentions.has(client.user) && !message.mentions.everyone) {
     const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
-    if (!prompt) return message.reply("I'm here! What code can I help with?");
+    if (!prompt) return message.reply("I'm awake! How can I help you code?");
 
     try {
       await message.channel.sendTyping();
-      const response = await fetch(API_URL, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "https://railway.app"
-        },
-        body: JSON.stringify({
-          model: "qwen/qwen-2.5-coder-32b-instruct:free",
-          messages: [{ role: "user", content: prompt }]
-        })
-      });
 
-      const data = await response.json();
-      if (data.error) return message.reply(`❌ AI Error: ${data.error.message}`);
-      
-      let text = data.choices[0].message.content;
-      await message.reply(text.length > 2000 ? text.substring(0, 1950) + "..." : text);
+      // System instruction is built into the prompt for the free tier
+      const fullPrompt = `You are a helpful coding assistant. Answer this: ${prompt}`;
+      const result = await model.generateContent(fullPrompt);
+      const response = await result.response;
+      let text = response.text();
+
+      // Fix Discord 2000 character limit
+      if (text.length > 2000) text = text.substring(0, 1900) + "...";
+      await message.reply(text);
+
     } catch (err) {
-      message.reply("❌ Connection failed. Check Railway Variables!");
+      console.error(err);
+      message.reply("❌ Google AI is busy. Try again in a minute!");
     }
   }
 });
