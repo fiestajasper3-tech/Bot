@@ -1,26 +1,19 @@
 const { Client, GatewayIntentBits } = require('discord.js');
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const OpenAI = require('openai');
 require('dotenv').config();
 
-// 1. CRASH PROTECTION: Check if the API key is missing
-if (!process.env.GEMINI_KEY) {
-    console.error("❌ CRASH: GEMINI_KEY is missing in Railway Variables!");
-    process.exit(1); 
-}
-
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-    ]
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
 });
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-client.once('ready', () => {
-    console.log(`✅ Logged in as ${client.user.tag}`);
+// Setup OpenRouter
+const openai = new OpenAI({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY,
+  defaultHeaders: {
+    "HTTP-Referer": "https://github.com", // Required by OpenRouter
+    "X-Title": "My Discord Bot",         // Optional: Shows in your dashboard
+  }
 });
 
 client.on('messageCreate', async (message) => {
@@ -30,12 +23,18 @@ client.on('messageCreate', async (message) => {
 
     try {
         await message.channel.sendTyping();
-        const result = await model.generateContent(prompt);
-        await message.reply(result.response.text());
+
+        const response = await openai.chat.completions.create({
+            model: "google/gemini-2.0-flash-001", // You can change this to any OpenRouter model
+            messages: [{ role: "user", content: prompt }],
+        });
+
+        const reply = response.choices[0].message.content;
+        await message.reply(reply || "I'm not sure what to say.");
+
     } catch (err) {
-        console.error("API Error:", err);
-        // This is the "Busy" fix we talked about
-        message.reply("❌ Google is busy or rate-limited. Try again in 10 seconds.");
+        console.error("OpenRouter Error:", err);
+        message.reply("❌ There was an error connecting to OpenRouter.");
     }
 });
 
