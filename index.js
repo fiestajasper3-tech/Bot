@@ -1,25 +1,27 @@
+const { Client, GatewayIntentBits } = require('discord.js');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY);
+require('dotenv').config();
 
-// Use 'gemini-1.5-flash' for faster, more stable replies than 'pro'
+// 1. CRASH PROTECTION: Check if the API key is missing
+if (!process.env.GEMINI_KEY) {
+    console.error("❌ CRASH: GEMINI_KEY is missing in Railway Variables!");
+    process.exit(1); 
+}
+
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
+    ]
+});
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-async function chatWithAI(prompt, retries = 3) {
-    for (let i = 0; i < retries; i++) {
-        try {
-            const result = await model.generateContent(prompt);
-            return result.response.text();
-        } catch (error) {
-            // If it's a "Busy" error (503) or "Rate Limit" (429)
-            if (i < retries - 1) {
-                console.log(`Google is busy... retrying (Attempt ${i + 1})`);
-                await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
-            } else {
-                throw error; // If it fails after 3 tries, give up
-            }
-        }
-    }
-}
+client.once('ready', () => {
+    console.log(`✅ Logged in as ${client.user.tag}`);
+});
 
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.mentions.has(client.user)) return;
@@ -28,9 +30,13 @@ client.on('messageCreate', async (message) => {
 
     try {
         await message.channel.sendTyping();
-        const response = await chatWithAI(prompt);
-        await message.reply(response);
+        const result = await model.generateContent(prompt);
+        await message.reply(result.response.text());
     } catch (err) {
-        message.reply("❌ Google AI is currently overloaded. Please try again in 1 minute!");
+        console.error("API Error:", err);
+        // This is the "Busy" fix we talked about
+        message.reply("❌ Google is busy or rate-limited. Try again in 10 seconds.");
     }
 });
+
+client.login(process.env.TOKEN);
