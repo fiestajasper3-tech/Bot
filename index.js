@@ -1,65 +1,43 @@
-const { Client, GatewayIntentBits, Partials } = require('discord.js');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { Client, GatewayIntentBits } = require('discord.js');
+const Groq = require('groq-sdk');
 require('dotenv').config();
 
-// 1. Initialize Discord Client
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-  ],
-  partials: [Partials.Channel]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
 });
 
-// 2. Initialize Gemini AI
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY);
-const model = genAI.getGenerativeModel({ 
-  model: "gemini-1.5-flash",
-  systemInstruction: "You are an elite coding assistant. Your name is DevBot. You help users write, debug, and explain code. Always use Markdown code blocks. If the user asks something non-coding related, gently steer them back to programming."
-});
-
-client.once('ready', () => {
-  console.log(`✅ ${client.user.tag} is online and ready to help!`);
-});
+// Initialize Groq with your new key
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 client.on('messageCreate', async (message) => {
-  // Ignore other bots
   if (message.author.bot) return;
 
-  // 3. Check if the bot was @mentioned
+  // Check for @mention
   if (message.mentions.has(client.user) && !message.mentions.everyone) {
-    
-    // Clean the message (remove the @mention part)
     const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
-    
-    if (!prompt) {
-      return message.reply("Hey there! Mention me and ask a coding question, like: '@DevBot how do I make a Discord bot?'");
-    }
+    if (!prompt) return message.reply("I'm here! Ask me any coding question.");
 
     try {
-      // Show "Bot is typing..." on mobile
       await message.channel.sendTyping();
 
-      // Generate AI response
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      let text = response.text();
-
-      // Discord limit is 2000 characters
-      if (text.length > 2000) {
-        text = text.substring(0, 1900) + "... (Response too long for Discord)";
-      }
-
-      // 4. Reply directly to the mention
-      await message.reply({
-        content: text,
-        allowedMentions: { repliedUser: true }
+      const chatCompletion = await groq.chat.completions.create({
+        messages: [
+          { role: "system", content: "You are an expert coding assistant. Give clear, concise code examples using Markdown." },
+          { role: "user", content: prompt }
+        ],
+        model: "llama-3.3-70b-versatile", // Very strong at coding
       });
 
+      let response = chatCompletion.choices[0].message.content;
+
+      if (response.length > 2000) {
+        response = response.substring(0, 1900) + "... (truncated)";
+      }
+
+      await message.reply(response);
     } catch (error) {
-      console.error("AI Error:", error);
-      message.reply("⚠️ My circuits fried! Try asking that again in a moment.");
+      console.error(error);
+      message.reply("I had trouble reaching my brain. Try again!");
     }
   }
 });
