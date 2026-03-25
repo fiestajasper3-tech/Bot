@@ -1,62 +1,48 @@
-const { Client, GatewayIntentBits, Partials } = require('discord.js');
-const OpenAI = require('openai');
-const http = require('http'); // Required for Railway health check
+const { Client, GatewayIntentBits } = require('discord.js');
+const { Groq } = require('groq-sdk');
+const http = require('http');
 require('dotenv').config();
 
-// 1. --- RAILWAY HEALTH CHECK ---
-// This keeps the bot from crashing/restarting on Railway
-const server = http.createServer((req, res) => {
-  res.writeHead(200);
-  res.end('Bot is healthy!');
-});
+// --- RAILWAY HEALTH CHECK ---
+http.createServer((req, res) => { res.write('OK'); res.end(); }).listen(process.env.PORT || 8080);
 
-// Railway automatically gives you a PORT variable
-const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => {
-  console.log(`✅ Health check server listening on port ${PORT}`);
-});
-
-// 2. --- DISCORD CLIENT SETUP ---
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent, // MUST be ON in Dev Portal
-    ],
-    partials: [Partials.Channel, Partials.Message]
+        GatewayIntentBits.MessageContent
+    ]
 });
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENROUTER_API_KEY,
-    baseURL: "https://openrouter.ai/api/v1"
-});
+// Initialize Groq
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 client.once('ready', () => {
-    console.log(`✅ Logged in as ${client.user.tag}`);
+    console.log(`⚡ Groq Bot is online as ${client.user.tag}`);
 });
 
-// 3. --- MESSAGE HANDLER ---
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.mentions.has(client.user)) return;
 
+    const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
+    if (!prompt) return;
+
     try {
         await message.channel.sendTyping();
-        const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
 
-        const completion = await openai.chat.completions.create({
-            model: "google/gemini-2.0-flash-001", 
-            messages: [{ role: "user", content: prompt || "Hello!" }],
+        const chatCompletion = await groq.chat.completions.create({
+            // "llama-3.3-70b-versatile" is one of the best free models in 2026
+            messages: [{ role: "user", content: prompt }],
+            model: "llama-3.3-70b-versatile",
         });
 
-        await message.reply(completion.choices[0].message.content);
+        const reply = chatCompletion.choices[0]?.message?.content;
+        await message.reply(reply || "I'm drawing a blank. Try asking again!");
+
     } catch (err) {
-        console.error("OpenRouter Error:", err);
-        message.reply("⚠️ OpenRouter is having trouble. Check your credits!");
+        console.error("Groq API Error:", err);
+        message.reply("❌ Groq is feeling a bit slow. Try again in a moment!");
     }
 });
-
-// Error handling to prevent crashes from networking blips
-client.on('error', console.error);
-process.on('unhandledRejection', console.error);
 
 client.login(process.env.TOKEN);
