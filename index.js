@@ -2,39 +2,56 @@ const { Client, GatewayIntentBits } = require('discord.js');
 const OpenAI = require('openai');
 require('dotenv').config();
 
-const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+// --- CRASH GUARD ---
+const requiredVars = ['TOKEN', 'OPENROUTER_API_KEY'];
+requiredVars.forEach(varName => {
+    if (!process.env[varName]) {
+        console.error(`❌ CRITICAL ERROR: ${varName} is missing in Railway Variables!`);
+        process.exit(1); 
+    }
 });
 
-// Setup OpenRouter
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
+    ]
+});
+
 const openai = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: process.env.OPENROUTER_API_KEY,
   defaultHeaders: {
-    "HTTP-Referer": "https://github.com", // Required by OpenRouter
-    "X-Title": "My Discord Bot",         // Optional: Shows in your dashboard
+    "HTTP-Referer": "https://github.com", 
+    "X-Title": "My Discord Bot",
   }
+});
+
+client.once('ready', () => {
+    console.log(`✅ OpenRouter Bot is live: ${client.user.tag}`);
 });
 
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.mentions.has(client.user)) return;
 
     const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
+    if (!prompt) return;
 
     try {
         await message.channel.sendTyping();
 
-        const response = await openai.chat.completions.create({
-            model: "google/gemini-2.0-flash-001", // You can change this to any OpenRouter model
+        const completion = await openai.chat.completions.create({
+            model: "google/gemini-2.0-flash-001", // Or "meta-llama/llama-3.1-8b-instruct:free"
             messages: [{ role: "user", content: prompt }],
         });
 
-        const reply = response.choices[0].message.content;
-        await message.reply(reply || "I'm not sure what to say.");
+        const response = completion.choices[0].message.content;
+        await message.reply(response || "I couldn't generate a response.");
 
     } catch (err) {
         console.error("OpenRouter Error:", err);
-        message.reply("❌ There was an error connecting to OpenRouter.");
+        message.reply("❌ Error connecting to OpenRouter. Check your API credits!");
     }
 });
 
