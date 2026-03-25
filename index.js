@@ -1,9 +1,6 @@
 const fetch = require("node-fetch");
 
-// Get API key from Railway Variables
 const API_KEY = process.env.API_KEY;
-
-// Change this if Verba gives you a specific endpoint
 const BASE_URL = "https://api.verba.ink/v1/chat";
 
 async function sendMessage(message) {
@@ -15,7 +12,10 @@ async function sendMessage(message) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        message: message
+        model: "verba-chat",
+        messages: [
+          { role: "user", content: message }
+        ]
       })
     });
 
@@ -26,5 +26,4 @@ async function sendMessage(message) {
   }
 }
 
-// Test message
-sendMessage("Hello from Railway bot!");
+sendMessage("Hello!");
