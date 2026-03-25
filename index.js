@@ -12,15 +12,13 @@ async function sendMessage(message) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "verba-chat",
-        messages: [
-          { role: "user", content: message }
-        ]
+        message: message
       })
     });
 
-    const data = await res.json();
-    console.log("Response:", data);
+    const text = await res.text();
+    console.log("RAW RESPONSE:", text);
+
   } catch (err) {
     console.error("Error:", err);
   }
