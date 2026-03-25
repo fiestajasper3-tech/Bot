@@ -1,13 +1,40 @@
-{
-  "name": "gemini-bot",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
-  "dependencies": {
-    "discord.js": "^14.13.0",
-    "@google/generative-ai": "^0.1.0",
-    "dotenv": "^16.3.1"
+const { Client, GatewayIntentBits } = require('discord.js');
+const OpenAI = require('openai');
+require('dotenv').config();
+
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+});
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+client.on('messageCreate', async (message) => {
+  if (message.author.bot) return;
+
+  if (message.mentions.has(client.user) && !message.mentions.everyone) {
+    const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
+    if (!prompt) return message.reply("How can I help you?");
+
+    try {
+      await message.channel.sendTyping();
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini", // Cheapest and fastest for 2026
+        messages: [
+          { role: "system", content: "You are a helpful coding assistant for a Discord server." },
+          { role: "user", content: prompt }
+        ],
+      });
+
+      let text = completion.choices[0].message.content;
+      if (text.length > 2000) text = text.substring(0, 1900) + "...";
+
+      await message.reply(text);
+    } catch (err) {
+      console.error(err);
+      message.reply("OpenAI Error: Make sure you have a paid balance!");
+    }
   }
-}
+});
+
+client.login(process.env.DISCORD_TOKEN);
