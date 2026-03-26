@@ -1,3 +1,13 @@
+const http = require('http');
+
+// This keeps Railway from killing your bot
+http.createServer((req, res) => {
+  res.writeHead(200);
+  res.end('Bot is running!');
+}).listen(process.env.PORT || 8080);
+
+console.log("⚓ Railway Health Check initialized.");
+
 const axios = require('axios');
 
 // Example function to call Verba's API
