@@ -3,13 +3,13 @@ const Groq = require('groq-sdk');
 const http = require('http');
 require('dotenv').config();
 
-// 1. RAILWAY HEALTH CHECK (Must be at the very top)
+// 1. RAILWAY HEALTH CHECK (Must be at the top)
 http.createServer((req, res) => {
   res.writeHead(200);
   res.end('AI Bot is Active');
 }).listen(process.env.PORT || 8080);
 
-// 2. DEFINE THE CLIENT (This fixes your error!)
+// 2. SETUP THE BOT (This defines 'client')
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -20,17 +20,18 @@ const client = new Client({
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-// 3. STARTUP LOG
+// 3. STARTUP MESSAGE
 client.once('ready', () => {
     console.log(`🤖 AI ONLINE: Logged in as ${client.user.tag}`);
 });
 
 // 4. AI CHAT LOGIC
 client.on('messageCreate', async (message) => {
+    // Ignore bots and messages that don't tag this bot
     if (message.author.bot || !message.mentions.has(client.user)) return;
 
     const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
-    if (!prompt) return message.reply("How can I help with your code today?");
+    if (!prompt) return message.reply("I'm ready! Paste your code or ask a question.");
 
     try {
         await message.channel.sendTyping();
@@ -39,7 +40,7 @@ client.on('messageCreate', async (message) => {
             messages: [
                 { 
                     role: "system", 
-                    content: "You are a Senior Developer. Provide clean code blocks and explain errors simply." 
+                    content: "You are an expert Senior Developer. Always use code blocks (```js) for code. If there is an error, explain the fix clearly." 
                 },
                 { role: "user", content: prompt }
             ],
@@ -48,15 +49,21 @@ client.on('messageCreate', async (message) => {
         });
 
         const aiResponse = completion.choices[0]?.message?.content;
-        await message.reply(aiResponse.substring(0, 2000));
+        
+        // Discord limit check
+        if (aiResponse.length > 2000) {
+            return message.reply(aiResponse.substring(0, 1900) + "... (truncated)");
+        }
+
+        await message.reply(aiResponse);
 
     } catch (err) {
         console.error("AI Error:", err.message);
-        message.reply("⚠️ AI brain fog! Try a shorter message.");
+        message.reply("⚠️ Something went wrong with the AI brain. Try again!");
     }
 });
 
-// 5. SAFETY
+// 5. ANTI-CRASH
 process.on('unhandledRejection', error => console.error('Error:', error));
 
 client.login(process.env.TOKEN);
