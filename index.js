@@ -1,14 +1,12 @@
-const fs = require('node:fs');
-const path = require('node:path');
-const { Client, Collection, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits } = require('discord.js');
+const Groq = require('groq-sdk');
 const http = require('http');
 require('dotenv').config();
 
-// --- 1. RAILWAY HEALTH CHECK ---
-// This prevents the "Crashed" status on the Railway dashboard
+// 1. RAILWAY HEALTH CHECK (Keeps the bot from "crashing" on the dashboard)
 http.createServer((req, res) => {
   res.writeHead(200);
-  res.end('Bot is healthy and running!');
+  res.end('AI Bot is Awake!');
 }).listen(process.env.PORT || 8080);
 
 const client = new Client({
@@ -19,49 +17,46 @@ const client = new Client({
   ]
 });
 
-client.commands = new Collection();
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-// --- 2. COMMAND LOADER (Scans /commands folder) ---
-const commandsPath = path.join(__dirname, 'commands');
-if (fs.existsSync(commandsPath)) {
-    const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-    for (const file of commandFiles) {
-        const filePath = path.join(commandsPath, file);
-        const command = require(filePath);
-        if ('data' in command && 'execute' in command) {
-            client.commands.set(command.data.name, command);
-        }
+// 2. STARTUP LOG
+client.once('ready', () => {
+    console.log(`-----------------------------------------`);
+    console.log(`🤖 AI ONLINE: Logged in as ${client.user.tag}`);
+    console.log(`-----------------------------------------`);
+});
+
+// 3. AI CHAT LOGIC (Mention the bot to talk)
+client.on('messageCreate', async (message) => {
+    // Ignore other bots or messages that don't mention this bot
+    if (message.author.bot || !message.mentions.has(client.user)) return;
+
+    // Clean the message
+    const prompt = message.content.replace(`<@${client.user.id}>`, '').trim();
+    if (!prompt) return message.reply("I'm listening! What's on your mind?");
+
+    try {
+        await message.channel.sendTyping();
+
+        const completion = await groq.chat.completions.create({
+            messages: [
+                { role: "system", content: "You are a helpful and witty AI assistant living inside a Discord server." },
+                { role: "user", content: prompt }
+            ],
+            model: "llama-3.3-70b-versatile",
+        });
+
+        const reply = completion.choices[0]?.message?.content;
+        await message.reply(reply || "My brain took a tiny nap. Try again?");
+
+    } catch (err) {
+        console.error("AI Error:", err.message);
+        message.reply("⚠️ I'm having trouble connecting to my AI brain right now.");
     }
-}
-
-// --- 3. EVENT LOADER (Scans /events folder for ready.js & messageCreate.js) ---
-const eventsPath = path.join(__dirname, 'events');
-if (fs.existsSync(eventsPath)) {
-    const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
-    for (const file of eventFiles) {
-        const filePath = path.join(eventsPath, file);
-        const event = require(filePath);
-        if (event.once) {
-            client.once(event.name, (...args) => event.execute(...args));
-        } else {
-            client.on(event.name, (...args) => event.execute(...args));
-        }
-    }
-}
-
-// --- 4. THE ANTI-CRASH SYSTEM ---
-// This stops the bot from dying if there is a small error in your code or API
-process.on('unhandledRejection', (reason, promise) => {
-    console.error(' [ANTI-CRASH] Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
-process.on('uncaughtException', (err, origin) => {
-    console.error(' [ANTI-CRASH] Uncaught Exception:', err, 'at:', origin);
-});
+// 4. ANTI-CRASH (The Safety Net)
+process.on('unhandledRejection', error => console.error('Error:', error));
+process.on('uncaughtException', error => console.error('Critical Error:', error));
 
-process.on('uncaughtExceptionMonitor', (err, origin) => {
-    console.error(' [ANTI-CRASH] Exception Monitor:', err, 'at:', origin);
-});
-
-// --- 5. LOGIN ---
 client.login(process.env.TOKEN);
