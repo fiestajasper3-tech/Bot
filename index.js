@@ -1,29 +1,18 @@
-const fetch = require("node-fetch");
+const axios = require('axios');
 
-const API_KEY = process.env.OPENAI_API_KEY;
-
-async function sendMessage(message) {
-  try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "user", content: message }
-        ]
-      })
-    });
-
-    const data = await res.json();
-    console.log("Reply:", data.choices[0].message.content);
-
-  } catch (err) {
-    console.error("Error:", err);
-  }
+// Example function to call Verba's API
+async function callVerba(input) {
+    try {
+        const response = await axios.post('https://verba.ink/api/v1/process', {
+            text: input
+        }, {
+            headers: {
+                // This 'Authorization' header is where your key actually goes
+                'Authorization': `Bearer ${process.env.VERBA_API_KEY}`
+            }
+        });
+        return response.data;
+    } catch (err) {
+        console.error("Verba API Error:", err.response?.data || err.message);
+    }
 }
-
-sendMessage("Hello!");
