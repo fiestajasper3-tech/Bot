@@ -1,10 +1,10 @@
 {
-  "name": "discord-verba-bot",
+  "name": "discord-openrouter-bot",
   "version": "1.0.0",
   "main": "index.js",
   "dependencies": {
     "discord.js": "^14.17.3",
-    "axios": "^1.6.0",
+    "openai": "^4.28.0",
     "dotenv": "^16.4.5"
   },
   "scripts": {
